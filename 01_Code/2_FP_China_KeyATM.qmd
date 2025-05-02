@@ -1,0 +1,228 @@
+---
+title: "Text as Data Final Project: KeyATM China"
+author: "Wendy Shi"
+format: html
+toc: TRUE
+toc-location: left
+toc-depth: 7
+embed-resources: TRUE
+editor: visual
+---
+
+```{r}
+pacman::p_load(dplyr, tidyverse, ggplot2, quanteda, quanteda.textplots,
+               tidytext, readxl, stm, keyATM) 
+```
+
+## Load Data
+
+```{r}
+df <- read_excel("../03_Data/China_merged_2024.xlsx")
+China_full <- df %>% 
+  select(headline, abstract, Merged, section, query_date)
+```
+
+```{r}
+China_full$contains_trump <- ifelse(grepl("Trump", China_full$headline), 1, 0)
+table(China_full$contains_trump)
+```
+
+## Pre-processing
+
+```{r}
+China_full$Merged <- gsub("[‘’´`]", "'", China_full$Merged)  #Turn all
+China_full$Merged<- gsub("'", "", China_full$Merged) 
+
+data_tokens <- tokens(
+    China_full$Merged,
+    remove_numbers = TRUE,
+    remove_punct = TRUE,
+    remove_symbols = TRUE,
+    remove_separators = TRUE,
+    remove_url = TRUE
+  ) %>%
+  tokens_tolower() %>%
+  tokens_remove(
+    c(stopwords("english"),
+      "briefing",'u.s','monday','tuesday','wednesday', 'chinese','china', "chinas", "trumps",
+      "biden's",'Thursday','Frida','Saturday','can','year','like'
+    )
+  ) %>%
+  tokens_select(min_nchar = 2)
+```
+
+```{r}
+data_dfm <- dfm(data_tokens) %>%
+              dfm_trim(min_termfreq = 2, min_docfreq = 2)
+ncol(data_dfm)
+```
+
+```{r}
+keyATM_docs <- keyATM_read(texts = data_dfm)
+summary(keyATM_docs)
+```
+
+```{r}
+data_dfm_rm0 <- dfm_subset(data_dfm, ntoken(data_dfm) > 0)
+```
+
+```{r}
+keyATM_docs <- keyATM_read(texts = data_dfm_rm0)
+summary(keyATM_docs)
+```
+
+## Keyword Selection
+
+```{r}
+keywords <- list(
+  APAC = c('taiwan', 'korea', 'hong', 'kong', 'japan'),
+  Election  = c('election', 'vote','siena', 'poll'),
+  Economy = c('economy', 'market', 'stock'),
+  Foreign_Policy = c('putin','russia','ukraine', 'iran','israel','gaza'),
+  Olympics =  c('olympics', 'tracking'),
+  Technology = c('tiktok', 'a.i','electric', 'cars','vehicles', 'tech'),
+  Trade = c('trade', 'tariffs', 'imports', 'exports')
+)
+```
+
+```{r}
+key_viz <- visualize_keywords(docs = keyATM_docs, keywords = keywords)
+key_viz
+
+#ggsave("China_keyword_dis.png")
+```
+
+```{r}
+keywords <- list(
+  US_Politics = c('trump','republican','vance', 'electorate','democrats','biden','harris')
+)
+```
+
+```{r}
+key_viz <- visualize_keywords(docs = keyATM_docs, keywords = keywords)
+key_viz
+
+#ggsave("China_political_dis.png")
+```
+
+```{r}
+keywords_combined <- list(
+  APAC = c('taiwan', 'korea', 'hong', 'kong', 'japan'),
+  Election  = c('election', 'vote','siena', 'poll'),
+  Economy = c('economy', 'market', 'stock'),
+  Foreign_Policy = c('putin','russia','ukraine', 'iran','israel','gaza'),
+  Olympics =  c('olympics', 'tracking'),
+  Technology = c('tiktok', 'a.i','cars','electric','vehicles', 'tech'),
+  Trade = c('trade', 'tariffs', 'imports', 'export'),
+  US_Politics = c('trump','republican','vance', 'electorate','democrats','biden','harris')
+)
+```
+
+```{r}
+#If keyword all included then there should be no error
+key_viz <- visualize_keywords(docs = keyATM_docs, keywords = keywords_combined)
+#key_viz
+```
+
+# KeyATM
+
+```{r}
+#default is 1500
+my_options <- list(
+  seed          = 250, 
+  iterations    = 100)
+
+key_model <- keyATM(
+  docs      = keyATM_docs, # text input
+  no_keyword_topics = 4, 
+  keywords  = keywords_combined, # keywords
+  model     = "base",     
+  options   = my_options,  #       
+)
+```
+
+```{r}
+top_words(key_model)
+```
+
+## Model Fit
+
+```{r}
+#Plotting model fits
+fig_modelfit <- plot_modelfit(key_model)
+fig_modelfit
+```
+
+## Topic Distribution
+
+```{r}
+topic_dis <- values_fig(plot_pi(key_model))
+```
+
+```{r}
+library(ggplot2)
+
+# Make sure Topic is ordered by Probability or by original order
+topic_dis$Topic <- factor(topic_dis$Topic, levels = topic_dis$Topic)
+
+# Plot
+estimated_count_vish <- ggplot(topic_dis, aes(x = Topic, y = Probability)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  theme_minimal() +
+  labs(title = "Probability of Topics (keyATM Estimated)", x = "Topic", y = "Probability") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels
+
+estimated_count_vish
+
+#ggsave("China_keyATM_topic_dis.png")
+```
+
+## Covariates
+
+```{r}
+vars_selected <- data.frame(contains_trump = China_full$contains_trump)
+
+```
+
+```{r}
+out <- keyATM(
+  docs              = keyATM_docs,
+  no_keyword_topics = 5,
+  keywords          = keywords_combined,
+  model             = "covariates",
+  model_settings    = list(
+    covariates_data    = vars_selected,
+    covariates_formula = ~ contains_trump
+  ),
+  options = my_options,
+)
+
+```
+
+```{r}
+strata_topic <- by_strata_DocTopic(
+  out, by_var = "contains_trump",
+  labels = c('No Trump Mentioned', 'Mentioned Trump')
+)
+```
+
+```{r}
+#fig_doctopic <- plot(strata_topic, var_name = 'Contains Trump', show_topic = c(1, 2))
+#fig_doctopic
+# Now re-plot
+fig_doctopic <- plot(strata_topic, 
+                     var_name = "Contains Trump", 
+                     show_topic = c(1, 4, 6, 7))
+
+fig_doctopic 
+#ggsave("China_keyATM_cov1.png")
+```
+
+```{r}
+fig_doctopic <- plot(strata_topic, 
+                     var_name = "Contains Trump", 
+                     show_topic = c(8))
+
+fig_doctopic 
+#ggsave("China_keyATM_cov2.png")
+```

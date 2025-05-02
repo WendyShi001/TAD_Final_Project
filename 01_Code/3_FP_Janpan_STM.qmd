@@ -1,0 +1,150 @@
+---
+title: "Text as Data Final Project"
+author: "Wendy Shi"
+format: html
+toc: TRUE
+toc-location: left
+toc-depth: 7
+embed-resources: TRUE
+editor: visual
+---
+
+## Preparation
+
+```{r}
+pacman::p_load(dplyr, tidyverse, ggplot2, quanteda, quanteda.textplots,
+               tidytext, readxl, readr, stm) 
+```
+
+# Japan
+
+## Load Data
+
+\`\`\`{r}
+
+```{r}
+data <- read_excel("../Data/Japan_merged_2024.xlsx")
+Japan_full <- data %>% 
+  select(headline, abstract, section, Merged, query_date)
+```
+
+## Visualization
+
+```{r}
+# Turn Value count to a table
+value_counts <- table(Japan_full$section)
+value_df <- as.data.frame(value_counts)
+
+# Order by descending order
+top15_df <- value_df[order(-value_df$Freq), ]
+
+# Select top 10 rows
+top15_df <- head(top15_df, 15)
+```
+
+```{r}
+#Make sure the the counts are ranked for decending order for this plot (asked ChatGTP)
+top15_df$Var1 <- factor(top15_df$Var1, levels = top15_df$Var1[order(-top15_df$Freq)])
+
+# Ensure Category is treated as a factor with correct order
+ggplot(top15_df, aes(x = Var1, y = Freq)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  theme_minimal() +
+  labs(title = "Top 15 Category Counts",
+       x = "Category",
+       y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("Japan_true_dis.png")
+```
+
+## World Cloud
+
+```{r}
+#remove all '
+Japan_full$Merged <- gsub("[‘’´`]", "'", Japan_full$Merged)  #Turn all
+Japan_full$Merged<- gsub("'", "", Japan_full$Merged) 
+
+#Preprocessing
+full_tokens <- tokens(Japan_full$Merged, 
+                      remove_punct = TRUE,
+                      remove_numbers = TRUE)
+full_tokens <- tokens_remove(full_tokens, c(stopwords("en"), "Briefing",'u.s','Monday',
+                                            'Tuesday','Wednesday', 'Thursday','Friday','Saturday', 'October', 'Japans', 'Chinas', 'Trumps',
+                                            'can','year','like'))
+
+full_dfm <- dfm(full_tokens) 
+full_dfm <- full_dfm[rowSums(full_dfm) > 0,] # keep only the rows with non-zero
+```
+
+```{r}
+#png("Japan_cloud.png", width = 2000, height = 1600)
+textplot_wordcloud(full_dfm , random_order = FALSE,
+                   rotation = .25, max_words = 90,
+                   min_size = 0.3, max_size = 7,
+                   color = RColorBrewer::brewer.pal(5, "Set2"))
+
+
+#dev.off()
+```
+
+## STM
+
+## Model Performance: picking best K
+
+```{r}
+#|message: false 
+#|warning: false
+#|results: 'hide'
+
+set.seed(1234)
+dfm_stm <- quanteda::convert(full_dfm, to = "stm")
+
+k_result <- searchK(documents = dfm_stm$documents,
+                    vocab = dfm_stm$vocab,
+                    data = dfm_stm$meta,
+                    K = c(5, 8, 10, 15, 20),
+                    prevalence = ~1,  # Or include covariates here
+                    init.type = "Spectral")
+```
+
+## Best K Result
+
+```{r}
+#png("Japan_k.png", width = 600, height = 450)
+plot(k_result)
+```
+
+## Final Model
+
+```{r}
+#|message: false 
+#|warning: false
+#|results: 'hide'
+set.seed(1234)
+dfm_stm <- quanteda::convert(full_dfm, to = "stm")
+
+# fit stm model with K topics
+stm_m <- stm(documents = dfm_stm$documents, 
+             vocab = dfm_stm$vocab, 
+             data = dfm_stm$meta, 
+             K = 20, 
+             init.type = "Spectral")
+```
+
+## Topic Distribution
+
+```{r}
+#This command tells you the topic distribution
+#png("Japan_K20.png", width = 600, height = 450)
+#labelTopics(stm_m)
+par(mar = c(3, 1, 3, 1)) 
+plot(stm_m, n = 4)
+```
+
+# Just Japan
+
+```{r}
+Japan_full$contains_japan <- ifelse(grepl("Japan", Japan_full$headline), 1, 0)
+table(Japan_full$contains_japan)
+```

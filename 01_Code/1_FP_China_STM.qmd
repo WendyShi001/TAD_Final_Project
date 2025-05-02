@@ -1,0 +1,147 @@
+---
+title: "Text as Data Final Project"
+author: "Wendy Shi"
+format: html
+toc: TRUE
+toc-location: left
+toc-depth: 7
+embed-resources: TRUE
+editor: visual
+---
+
+## Preparation
+
+```{r}
+pacman::p_load(dplyr, tidyverse, ggplot2, quanteda, quanteda.textplots,
+               tidytext, readxl, stm) 
+```
+
+# China
+
+## Load Data
+
+```{r}
+df <- read_excel("../Data/China_merged_2024.xlsx")
+China_full <- df %>% 
+  select(headline, abstract, Merged, section, query_date)
+
+#hina_full$combined <- paste(China_full$headline, China_full$abstract, sep = " ")
+```
+
+## Visualization
+
+```{r}
+# Turn Value count to a table
+value_counts <- table(China_full$section)
+value_df <- as.data.frame(value_counts)
+
+# Order by descending order
+top15_df <- value_df[order(-value_df$Freq), ]
+
+# Select top 10 rows
+top15_df <- head(top15_df, 15)
+```
+
+```{r}
+#Make sure the the counts are ranked for decending order for this plot (asked ChatGTP)
+top15_df$Var1 <- factor(top15_df$Var1, levels = top15_df$Var1[order(-top15_df$Freq)])
+
+# Ensure Category is treated as a factor with correct order
+ggplot(top15_df, aes(x = Var1, y = Freq)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  theme_minimal() +
+  labs(title = "Top 15 Category Counts",
+       x = "Category",
+       y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#ggsave("China_true_dis.png")
+```
+
+## World Cloud
+
+```{r}
+#Since Merged doesn't converge, using headline for STM
+China_full$headline <- as.character(China_full$headline)
+China_full <- China_full[!is.na(China_full$headline), ]
+```
+
+```{r}
+China_full$Merged <- gsub("[‘’´`]", "'", China_full$Merged)  #Turn all
+China_full$Merged<- gsub("'", "", China_full$Merged) 
+
+full_tokens <- tokens(China_full$Merged, 
+                      remove_punct = TRUE,
+                      remove_numbers = TRUE)
+full_tokens <- tokens_remove(full_tokens, c(stopwords("en"), "Briefing",'u.s','Monday',
+                                            'Tuesday','Wednesday', 'Thursday','Friday','Saturday', 'October', 'Chinas', 'Trumps', 'Bidens', 'none',
+                                            'can','year','like'))
+head(featnames(dfm(full_tokens)), 20)
+```
+
+```{r}
+full_dfm <- dfm(full_tokens)
+full_dfm <- full_dfm[rowSums(full_dfm) > 0,] # keep only the rows with non-zero row value
+
+#png("China_cloud.png", width = 2000, height = 1600)
+textplot_wordcloud(full_dfm , random_order = FALSE,
+                   rotation = .25, max_words = 90,
+                   min_size = 0.5, max_size = 7,
+                   color = RColorBrewer::brewer.pal(5, "Set2"))
+
+#dev.off()
+```
+
+## STM
+
+## Model Performance: picking best K
+
+```{r}
+#|message: false 
+#|warning: false
+#|results: 'hide'
+
+set.seed(1234)
+dfm_stm <- quanteda::convert(full_dfm, to = "stm")
+
+k_result <- searchK(documents = dfm_stm$documents,
+                    vocab = dfm_stm$vocab,
+                    data = dfm_stm$meta,
+                    K = c(5, 8, 10, 15, 20),
+                    prevalence = ~1,  # Or include covariates here
+                    init.type = "Spectral")
+```
+
+## Best K Result
+
+```{r}
+#png("China_k.png", width = 600, height = 450)
+plot(k_result)
+```
+
+## Final Model
+
+```{r}
+#|message: false 
+#|warning: false
+#|results: 'hide'
+set.seed(1234)
+dfm_stm <- quanteda::convert(full_dfm, to = "stm")
+
+# fit stm model with K topics
+stm_m <- stm(documents = dfm_stm$documents, 
+             vocab = dfm_stm$vocab, 
+             data = dfm_stm$meta, 
+             K = 15, 
+             init.type = "Spectral")
+```
+
+## Topic Distribution
+
+```{r}
+#This command tells you the topic distribution
+#png("China_K20.png", width = 600, height = 450)
+labelTopics(stm_m)
+par(mar = c(3, 1, 3, 1))  # #I asked Chat GTP to add this line: Increase left margin for longer labels
+plot(stm_m, n = 4, labeltype = "frex")
+```
