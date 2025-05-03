@@ -14,8 +14,8 @@ To address this limitation, I adopt a semi-supervised approach using the Keyword
 ## Folder Guide
 ### `01_Code/`
 - `0_NYT_Data_Collection.ipynb` : Python notebook to query New York Time API
-- `1_FP_China_STM.qmd`: R file to generate word cloud, NYT lable distribution, `searchk()` for `STM`, and final `STM` result
-- `2_FP_China_KeyATM.qmd`: R file to generate keyword distribution, `KeyATM` results, and covariates analysis for China
+- `1_FP_China_STM.qmd`: R file to generate word cloud, NYT lable distributions, `searchk()` for `STM`, and final `STM` results
+- `2_FP_China_KeyATM.qmd`: R file to generate keyword distributions, `KeyATM` results, and covariates analysis for China
 - `3_FP_Japan_STM.qmd`: `STM` analysis for Japan
 - `4_FP_Japan_STM.qmd`: `KeyATM` analysis for Japan
 
