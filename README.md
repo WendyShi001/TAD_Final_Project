@@ -1,4 +1,4 @@
-# US Media coverage of China: A Comparative Study with Keyword-Assisted Topic Model
+# US Media Coverage of China: A Comparative Study with Keyword-Assisted Topic Model
 
 Wendy Shi
 
