@@ -30,7 +30,7 @@ All mentioned files in `01_code/`, compiled to html
 This folder contains the visualizations included in the final paper. Please refer to the file names of each image for reference.
 
 ### `05_Final_Paper`
-This contains word and pdf format of final paper
+This contains the pdf format of the final paper
 
 ### `06_Presentation.pdf`
 Presentation used for the class
